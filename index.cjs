@@ -25,7 +25,7 @@ async function getAlchecoinAmounts () {
     (async () => {
         await clientDb.connect();
         console.log('connected')
-        const minAmount = 1
+        const minAmount = 0
         const limit = 1000
         while (numtx > 0) {
             // execute code as long as condition is true
