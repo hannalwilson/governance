@@ -30,42 +30,44 @@ async function getAlchecoinAmounts () {
     let numtx = 1;
     // loop until there are no more transactions in the response
     // for the limit(max limit is 1000  per request)
-    (async () => {
-        console.log('starting alchecoin')
-        const minAmount = 1
+
+        await clientDb.connect();
+        console.log('connected')
+        const minAmount = 0
         const limit = 1000
-        while (numtx > 0) {
-            // execute code as long as condition is true
-            const nextPage = nexttoken
-            const response = await client.lookupAssetBalances(310014962)
-                .limit(limit)
-                .currencyGreaterThan(minAmount)
-                .nextToken(nextPage).do()
-            const transactions = response.balances
-            numtx = transactions.length
-            if (numtx > 0) {
-                nexttoken = response['next-token']
-                for (const key of transactions) {
-                    // await clientDb.query("INSERT INTO governance_accounts(wallet_address, alchecoin_amount) VALUES ($1, $2)", [key.address, key.amount]);
-                    userBalances[key.address] = key.amount
+        try {
+            while (numtx > 0) {
+                // execute code as long as condition is true
+                const nextPage = nexttoken
+                const response = await client.lookupAssetBalances(310014962)
+                    .limit(limit)
+                    .currencyGreaterThan(minAmount)
+                    .nextToken(nextPage).do()
+                const transactions = response.balances
+                numtx = transactions.length
+                if (numtx > 0) {
+                    nexttoken = response['next-token']
+                    for (const key of transactions) {
+                        await clientDb.query("INSERT INTO governance_accounts(wallet_address, alchecoin_amount) VALUES ($1, $2)", [key.address, key.amount]);
+                        userBalances[key.address] = key.amount
+                    }
                 }
             }
+
+            console.log("done")
+        } catch (e) {
+            console.log(e)
         }
-        console.log("done")
-    })().catch(e => {
-        console.log(e)
-        console.trace()
-    })
 }
 
-function getLPAlchecoinAmounts() {
+async function getLPAlchecoinAmounts() {
     let nexttoken = ''
 
     let numtx = 1;
     // loop until there are no more transactions in the response
     // for the limit(max limit is 1000  per request)
     for (const asset in liquidityPools) {
-        (async () => {
+        try {
             console.log('starting lp alchecoin')
             const minAmount = 1
             const limit = 1000
@@ -91,7 +93,7 @@ function getLPAlchecoinAmounts() {
             let numtx2 = 1;
 
             for (const account of lpAccounts) {
-                (async () => {
+                try {
                     let lpAlch = 0;
                     console.log('starting alchecoin sent to lp')
                     const limit = 1000
@@ -140,16 +142,13 @@ function getLPAlchecoinAmounts() {
                     console.log(userBalances[account])
                     console.log('done')
 
-                })().catch(e => {
+                } catch(e) {
                     console.log(e)
-                    console.trace()
-                })
+                }
             }
-
-        })().catch(e => {
+        }catch(e) {
             console.log(e)
-            console.trace()
-        })
+        }
     }
 }
 
@@ -159,6 +158,7 @@ async function insertAlchAmountsIntoDb () {
         console.log(user)
         await clientDb.query("INSERT INTO testing_governance(wallet_address, alchecoin_amount) VALUES ($1, $2)", [user, userBalances[user]]);
     }
+    clientDb.end();
 
 }
 
