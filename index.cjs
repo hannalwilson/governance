@@ -24,61 +24,59 @@ const credentials = {
 
 let userBalances = {};
 
-const liquidityPools = [
-    {
-        name: 'Humble',
+const liquidityPools = {
+    Humble: {
         token: 779144639,
         id: 779144473,
-        address: 'X5IP2POFOMYNPGTE6HIMZOIIJPLEWZBVZZU3D5BZ45LUROXD6GYNCN55KM'
-},
-    {
-        name: 'TinyMan',
+        address: 'X5IP2POFOMYNPGTE6HIMZOIIJPLEWZBVZZU3D5BZ45LUROXD6GYNCN55KM',
+    },
+    TinyMan: {
         token: 552701368,
         id: 552635992,
-        address: 'EJGN54S3OSQXDX5NYOGYZBGLIZZEKQSROO3AXKX2WPJ2CRMAW57YMDXWWE'
+        address: 'EJGN54S3OSQXDX5NYOGYZBGLIZZEKQSROO3AXKX2WPJ2CRMAW57YMDXWWE',
     }
-]
+}
 
 
 const lpAccounts = [];
 
 const clientDb = new Client(credentials);
 
-async function getAlchecoinAmounts () {
+async function getAlchecoinAmounts() {
     let nexttoken = ''
 
     let numtx = 1;
     // loop until there are no more transactions in the response
     // for the limit(max limit is 1000  per request)
-        console.log('connected')
-        const minAmount = 0
-        const limit = 1000
-        while (numtx > 0) {
-            // execute code as long as condition is true
-            const nextPage = nexttoken
-            const response = await client1.lookupAssetBalances(310014962)
-                .limit(limit)
-                .currencyGreaterThan(minAmount)
-                .nextToken(nextPage).do()
-            const balances = response.balances
-            numtx = balances.length
-            if (numtx > 0) {
-                nexttoken = response['next-token']
-                for (const key of balances) {
-                    userBalances[key.address] = key.amount  
-                }
+    console.log('connected')
+    const minAmount = 0
+    const limit = 1000
+    while (numtx > 0) {
+        // execute code as long as condition is true
+        const nextPage = nexttoken
+        const response = await client1.lookupAssetBalances(310014962)
+            .limit(limit)
+            .currencyGreaterThan(minAmount)
+            .nextToken(nextPage).do()
+        const balances = response.balances
+        numtx = balances.length
+        if (numtx > 0) {
+            nexttoken = response['next-token']
+            for (const key of balances) {
+                userBalances[key.address] = key.amount
             }
         }
+    }
     console.log("done")
 }
 
 async function getLPAlchecoinAmounts() {
-    let nexttoken = ''
-
-    let numtx = 1;
     // loop until there are no more transactions in the response
     // for the limit(max limit is 1000  per request)
-    for (const pool of liquidityPools) {
+    for (const pool in liquidityPools) {
+        let nexttoken = ''
+
+        let numtx = 1;
         try {
             console.log('starting lp alchecoin')
             const minAmount = 1
@@ -86,93 +84,34 @@ async function getLPAlchecoinAmounts() {
             while (numtx > 0) {
                 // execute code as long as condition is true
                 const nextPage = nexttoken
-                const response = await client2.lookupAssetBalances(pool.token)
+                const response = await client2.lookupAssetBalances(liquidityPools[pool].token)
                     .limit(limit)
                     .currencyGreaterThan(minAmount)
                     .nextToken(nextPage).do()
-                const transactions = response.balances
-                numtx = transactions.length
+                const balances = response.balances
+                numtx = balances.length
                 if (numtx > 0) {
                     nexttoken = response['next-token']
-                    for (const key of transactions) {
-                        if(!liquidityPools.includes(key.address)) {
-                            lpAccounts.push(key.address)
+                    for (const key of balances) {
+                        let lpAlch
+                        if (pool === 'Humble') {
+                            lpAlch = Math.round(key.amount * .0088)
+                        } else if (pool === 'TinyMan') {
+                            lpAlch = Math.round(key.amount * .0094)
+                        }
+                        console.log(key.address + ":" + lpAlch)
+
+                        if (userBalances[key.address]) {
+                            userBalances[key.address] += lpAlch
+                        } else {
+                            userBalances[key.address] = lpAlch
                         }
                     }
+
                 }
             }
             console.log("done")
-
-            let nexttoken2 = '';
-            let numtx2 = 1;
-            let clientNumber = 0;
-
-            for (const account of lpAccounts) {
-                try {
-                    let lpAlch = 0;
-                    console.log('starting alchecoin sent to lp')
-                    const limit = 1000
-                    while (numtx2 > 0) {
-                        // execute code as long as condition is true
-                        const nextPage = nexttoken2
-
-                        const response = await clients[clientNumber].searchForTransactions()
-                            .address(account)
-                            .assetID(310014962)
-                            .limit(limit)
-                            .nextToken(nextPage).do()
-                        const transactions = response.transactions
-                        numtx2 = transactions.length
-                        if (numtx2 > 0) {
-                            nexttoken2 = response['next-token']
-                            for (const key in transactions) {
-                                const trans = transactions[key]
-                                const assetTransfer = trans['asset-transfer-transaction']
-                                const applTrans = trans['application-transaction']
-                                try {
-                                    if (trans.sender === account && trans['tx-type'] === 'axfer') {
-                                        if (assetTransfer.receiver === pool.address && assetTransfer.amount > 0) {
-                                            lpAlch += assetTransfer.amount
-                                        }
-                                    } else if (trans['tx-type'] === 'appl' && applTrans['application-id'] === pool.id) {
-                                        const innerTxns = trans['inner-txns']
-                                        for (const key of innerTxns) {
-                                            const assetTransferTrans = key['asset-transfer-transaction']
-                                            if (key['tx-type'] === 'axfer' && key.sender === pool.address) {
-                                                lpAlch -= assetTransferTrans.amount
-                                            }
-                                        }
-                                    }
-                                } catch (e) {
-                                    console.log(e)
-                                }
-                            }
-                        }
-                    }
-                    if (clientNumber === 2) {
-                        clientNumber = 0
-                    } else {
-                        clientNumber++
-                    }
-
-                    if (lpAlch < 0) {
-                        lpAlch = 0
-                    }
-                    console.log(userBalances[account] + "+" + lpAlch)
-                    if (userBalances[account]) {
-                    userBalances[account] += lpAlch
-                    } else {
-                        userBalances[account] = lpAlch
-                    }
-                    console.log(userBalances[account])
-                    
-                    console.log('done')
-
-                } catch(e) {
-                    console.log(e)
-                }
-            }
-        }catch(e) {
+        } catch (e) {
             console.log(e)
         }
     }
@@ -182,7 +121,7 @@ async function insertAlchAmountsIntoDb() {
     await clientDb.connect();
     console.log('========================================DB CONNECTED=====================================')
     for (const user in userBalances) {
-        await clientDb.query("INSERT INTO testing_lpgovernance(wallet_address, alchecoin_amount) VALUES ($1, $2)", [user, userBalances[user]]);
+        await clientDb.query("INSERT INTO testing_governance(wallet_address, alchecoin_amount) VALUES ($1, $2)", [user, userBalances[user]]);
     }
     clientDb.end();
 
