@@ -1,18 +1,12 @@
 const algosdk = require('algosdk');
 const { Client } = require("pg");
+const axios = require('axios');
 
-const token1 = { "X-API-Key": 'PYEJEyam2A53h6jKnbPRpawjVyv5WQq56N82pTdR' };
-const token2 = { "X-API-Key": 'sxwIKIENYg9Es5rsmoanF5WAYXBBHDQ70vGvhI4g' };
-const token3 = { "X-API-Key": 'unD5uuW8C186BFO7Z9KkC5JNCuPVE3Wb8lkQnDGT' };
-
+const token = { "X-API-Key": 'unD5uuW8C186BFO7Z9KkC5JNCuPVE3Wb8lkQnDGT' };
 
 const server = 'https://mainnet-algorand.api.purestake.io/idx2';
 const port = '';
-const client1 = new algosdk.Indexer(token1, server, port);
-const client2 = new algosdk.Indexer(token2, server, port);
-const client3 = new algosdk.Indexer(token3, server, port);
-
-const clients = [client1, client2, client3];
+const client = new algosdk.Indexer(token, server, port);
 
 const credentials = {
     user: "lambda_user",
@@ -23,22 +17,6 @@ const credentials = {
 };
 
 let userBalances = {};
-
-const liquidityPools = {
-    Humble: {
-        token: 779144639,
-        id: 779144473,
-        address: 'X5IP2POFOMYNPGTE6HIMZOIIJPLEWZBVZZU3D5BZ45LUROXD6GYNCN55KM',
-    },
-    TinyMan: {
-        token: 552701368,
-        id: 552635992,
-        address: 'EJGN54S3OSQXDX5NYOGYZBGLIZZEKQSROO3AXKX2WPJ2CRMAW57YMDXWWE',
-    }
-}
-
-
-const lpAccounts = [];
 
 const clientDb = new Client(credentials);
 
@@ -54,7 +32,7 @@ async function getAlchecoinAmounts() {
     while (numtx > 0) {
         // execute code as long as condition is true
         const nextPage = nexttoken
-        const response = await client1.lookupAssetBalances(310014962)
+        const response = await client.lookupAssetBalances(310014962)
             .limit(limit)
             .currencyGreaterThan(minAmount)
             .nextToken(nextPage).do()
@@ -73,48 +51,21 @@ async function getAlchecoinAmounts() {
 async function getLPAlchecoinAmounts() {
     // loop until there are no more transactions in the response
     // for the limit(max limit is 1000  per request)
-    for (const pool in liquidityPools) {
-        let nexttoken = ''
-
-        let numtx = 1;
         try {
             console.log('starting lp alchecoin')
-            const minAmount = 1
-            const limit = 1000
-            while (numtx > 0) {
-                // execute code as long as condition is true
-                const nextPage = nexttoken
-                const response = await client2.lookupAssetBalances(liquidityPools[pool].token)
-                    .limit(limit)
-                    .currencyGreaterThan(minAmount)
-                    .nextToken(nextPage).do()
-                const balances = response.balances
-                numtx = balances.length
-                if (numtx > 0) {
-                    nexttoken = response['next-token']
-                    for (const key of balances) {
-                        let lpAlch
-                        if (pool === 'Humble') {
-                            lpAlch = Math.round(key.amount * .0088)
-                        } else if (pool === 'TinyMan') {
-                            lpAlch = Math.round(key.amount * .0094)
-                        }
-                        console.log(key.address + ":" + lpAlch)
-
-                        if (userBalances[key.address]) {
-                            userBalances[key.address] += lpAlch
-                        } else {
-                            userBalances[key.address] = lpAlch
-                        }
+            axios.get('https://free-api.vestige.fi/asset/310014962/contributors').then(response => {
+                for (const user of response.data) {
+                    if (userBalances[user.address]) {
+                        userBalances[user.address] += Math.round(user.balance)
+                    } else {
+                        userBalances[user.address] = Math.round(user.balance)
                     }
-
                 }
-            }
+            });
             console.log("done")
         } catch (e) {
             console.log(e)
         }
-    }
 }
 
 async function insertAlchAmountsIntoDb() {
